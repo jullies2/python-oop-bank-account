@@ -14,16 +14,19 @@ class AccountABC(ABC):
     def withdraw_money(self):
         pass
 
-    @abstractmethod
-    def get_balance(self):
-        pass
-
 class Account(AccountABC):
     def __init__(self, balance: float = 0.):
         self._balance: float = balance
         self._transactions_list: list[Transaction] = []
 
-
+    @property
+    def balance(self) -> float:
+        return self._balance
+    
+    @balance.setter
+    def balance(self, value: float) -> None:
+        self._balance
+    
     def log_transaction(transaction_type: str):
         def decorator(func):
             @wraps(func)
@@ -46,15 +49,20 @@ class Account(AccountABC):
                 return res
             return wrapper
         return decorator
-             
+
+    @staticmethod
+    def check_amount(amount):
+        if not isinstance(amount, (float, int)):
+            raise ValueError('Ошибка: Сумма операции должна быть числом')
+        if amount <= 0:
+            raise ValueError('Ошибка: Сумма операции должна быть положительной')         
+
     @log_transaction(transaction_type='DEPOSIT')
     def make_deposit(self, amount):
-        self._balance += amount
-        self.log(f'Пополнение {amount}. Текущий баланс: {self._balance}')
+        Account.check_amount(amount)
+        self.balance += amount
+        self.log(f'Пополнение {amount}. Текущий баланс: {self.balance}')
 
-    def get_balance(self) -> float:
-        return self._balance
-    
     def get_all_transactions(self) -> None:
         for transaction in self._transactions_list:
             print(transaction)
@@ -80,34 +88,40 @@ class SerializableMixin():
 class SavingsAccount(Account, LoggingMixin, SerializableMixin):
     @Account.log_transaction(transaction_type='WITHDRAW')
     def withdraw_money(self, amount):
-        if amount > self._balance:
+        Account.check_amount(amount)
+        if amount > self.balance:
             raise ValueError("Ошибка, недостаточно средств")
-        self._balance -= amount
-        self.log(f'Снятие {amount}. Текущий баланс: {self._balance}')
+        self.balance -= amount
+        self.log(f'Снятие {amount}. Текущий баланс: {self.balance}')
     
     def add_percent(self, percent: float = 5.):
-        self._balance *= 1 + percent / 100
-        self.log(f'Добавлен процент на остаток. Текущий баланс: {self._balance}')
+        Account.check_amount(percent)
+        self.balance *= 1 + percent / 100
+        self.log(f'Добавлен процент на остаток. Текущий баланс: {self.balance}')
 
 class CreditAccount(Account, LoggingMixin, SerializableMixin):
     def __init__(self, balance: float = 0. , limit = -10000):
         self._limit = limit
+        self._maximum_limit = -100000
         super().__init__(balance)
 
     @Account.log_transaction(transaction_type='WITHDRAW')
     def withdraw_money(self, amount):
-        new_balance = self._balance - amount
+        Account.check_amount(amount)
+        new_balance = self.balance - amount
         if new_balance < self._limit:
             fee = amount * 0.1
             amount += fee
-        self._balance -= amount
-        self.log(f'Снятие {amount}. Текущий баланс: {self._balance}')
-        
+        self.balance -= amount
+        if new_balance < self._maximum_limit:
+            raise ValueError('Операция отклонена: превышен максимальный лимит')
+        self.log(f'Снятие {amount}. Текущий баланс: {self.balance}')
+
 if __name__ == '__main__':
 
-    savings = SavingsAccount(1000.0)
+    savings = CreditAccount(1000.0)
     savings.make_deposit(500.0)  # Баланс: 1500.0
     savings.withdraw_money(200.0)  # Баланс: 1300.0
-    savings.withdraw_money(100.0)
-    savings.add_percent()
+    savings.withdraw_money(10000.0)
+    #savings.add_percent(6)
     savings.get_all_transactions()
