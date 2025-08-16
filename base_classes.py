@@ -5,7 +5,6 @@ import datetime
 import json  
 
 class AccountABC(ABC):
-             
     @abstractmethod
     def make_deposit(self):
         pass
