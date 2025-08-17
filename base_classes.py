@@ -4,6 +4,8 @@ from functools import wraps
 import datetime
 import json  
 
+DEFAULT_CREDIT_LIMIT = -10000
+
 class AccountABC(ABC):
     @abstractmethod
     def make_deposit(self):
@@ -65,6 +67,23 @@ class Account(AccountABC):
     def get_all_transactions(self) -> None:
         for transaction in self._transactions_list:
             print(transaction)
+
+    def transfer(self, target, amount: float):
+        Account.check_amount(amount)
+        if not isinstance(target, Account):
+            raise TypeError('Цель перевода должна быть счетом')
+        if self is target:
+            raise ValueError('Ошибка: отправитель и получатель совпадают')
+        if self.balance - amount < 0:
+            raise ValueError('Ошибка: недостаточно средств для перевода')
+        
+        target.balance += amount
+        target._transactions_list.append(Transaction('TRANSFER_IN', amount))
+        self.balance -= amount
+        self._transactions_list.append(Transaction('TRANSFER_OUT', amount))
+
+        if hasattr(self, 'log'):
+            self.log(f'Перевод {amount} на счет {target}')
     
 class LoggingMixin():
     def log(self, message: str) -> None:
@@ -99,9 +118,9 @@ class SavingsAccount(Account, LoggingMixin, SerializableMixin):
         self.log(f'Добавлен процент на остаток. Текущий баланс: {self.balance}')
 
 class CreditAccount(Account, LoggingMixin, SerializableMixin):
-    def __init__(self, balance: float = 0. , limit = -10000):
+    def __init__(self, balance: float = 0. , limit = DEFAULT_CREDIT_LIMIT):
         self._limit = limit
-        self._maximum_limit = -100000
+        self._maximum_limit = DEFAULT_CREDIT_LIMIT
         super().__init__(balance)
 
     @Account.log_transaction(transaction_type='WITHDRAW')
@@ -116,11 +135,21 @@ class CreditAccount(Account, LoggingMixin, SerializableMixin):
             raise ValueError('Операция отклонена: превышен максимальный лимит')
         self.log(f'Снятие {amount}. Текущий баланс: {self.balance}')
 
+class AccountFactory:
+
+    @staticmethod
+    def create_savings(balance: float = 0.):
+        return SavingsAccount(balance)
+    
+    @staticmethod
+    def create_credit(balance: float = 0, limit: float = -10000):
+        return CreditAccount(balance, limit)
+        
+
 if __name__ == '__main__':
 
-    savings = CreditAccount(1000.0)
+    savings = AccountFactory.create_savings(1000)
     savings.make_deposit(500.0)  # Баланс: 1500.0
     savings.withdraw_money(200.0)  # Баланс: 1300.0
     savings.withdraw_money(10000.0)
-    #savings.add_percent(6)
     savings.get_all_transactions()
